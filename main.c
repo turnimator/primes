@@ -76,7 +76,7 @@ int main(int argc, char** argv) {
     pthread_create(&tid[tid_idx++], NULL, mark_from, (void *) (&first));
     usleep(30);
     for (long i = 3; i < (nprimes); i++) {
-        while (noTasks > 56) {
+        while (noTasks > 2048) {
             printf("\r%d tasks active ", noTasks);
             usleep(30);
             noTasks--;
