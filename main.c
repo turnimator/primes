@@ -14,6 +14,7 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <sys/time.h>
 
 char *primes;
 long nprimes;
@@ -31,6 +32,7 @@ void *mark_from(void *p) {
         primes[i] = 'n';
     }
     --noTasks;
+    pthread_detach(pthread_self());
 }
 
 void print_primes() {
@@ -46,21 +48,32 @@ void print_primes() {
     }
 }
 
+pthread_t *tid;
+int tid_idx = 0;
+
 /*
  *
  */
 int main(int argc, char** argv) {
-    pthread_t tid;
+
+    struct timeval start_time, end_time;
+    long milli_time, seconds, useconds;
+
+
     if (argc < 2) {
         nprimes = 10000000;
     } else {
         nprimes = atoi(argv[1]);
     }
+    char buf[256];
+    printf("PPRIMES %s\n", getcwd(buf, 255));
     printf("Looking for primes up to %ld\n", nprimes);
+    tid = malloc(nprimes * sizeof (pthread_t));
     noTasks = 0;
     primes = malloc(nprimes * sizeof (char));
     long first = 2;
-    pthread_create(&tid, NULL, mark_from, (void *) (&first));
+    gettimeofday(&start_time, NULL);
+    pthread_create(&tid[tid_idx++], NULL, mark_from, (void *) (&first));
     usleep(30);
     for (long i = 3; i < (nprimes); i++) {
         while (noTasks > 56) {
@@ -69,12 +82,22 @@ int main(int argc, char** argv) {
             noTasks--;
         }
         if (primes[i] == 0) {
-            pthread_t tid2;
             long j = i;
-            int fail = pthread_create(&tid2, NULL, mark_from, (void *) (&j));
+            int fail = pthread_create(&tid[tid_idx++], NULL, mark_from, (void *) (&j));
+            if (fail) {
+                perror("Thread creation failed!");
+            }
         }
+
     }
-    pthread_join(tid, NULL);
+    /*
+    gettimeofday(&end_time, NULL);
+    seconds = end_time.tv_sec - start_time.tv_sec; //seconds
+    useconds = end_time.tv_usec - start_time.tv_usec; //milliseconds
+    milli_time = ((seconds) * 1000 + useconds / 1000.0);
+    printf("%ld milliseconds elapsed. Press ENTER to see primes:", milli_time);
+     */
+    //getchar();
     print_primes();
     free(primes);
     return (EXIT_SUCCESS);
