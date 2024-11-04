@@ -16,10 +16,37 @@
 #include <unistd.h>
 #include <sys/time.h>
 
+#define MAX_TASKS 256
+
+typedef struct segment {
+    long start;
+    long end;
+    long step;
+} seg_t, *seg_p;
+
 char *primes;
 long nprimes;
+int noCPUs = 56;
 
-int noTasks = 0; // no go
+volatile int noTasks = 0; // no go
+
+void *mark_segment(void*v) {
+    seg_p seg = v;
+    for (long i = seg->start; i < seg->end; i += seg->step) {
+        primes[i] = 'n';
+    }
+}
+
+void*mark_from_segmented(void *p) {
+    long n = *(long*) p;
+    primes[n] = 'p';
+    long segsz = nprimes / noCPUs;
+
+    for (long seg = n; seg < nprimes; seg += segsz) {
+
+    }
+
+}
 
 /**
  *   populate the array from prime p
@@ -28,11 +55,13 @@ void *mark_from(void *p) {
     long n = *(long*) p;
     primes[n] = 'p';
     ++noTasks;
+
     for (long i = n * 2; i < nprimes; i += n) {
         primes[i] = 'n';
     }
-    --noTasks;
-    pthread_detach(pthread_self());
+    noTasks = noTasks - 1;
+    printf("%ld\n", n);
+    pthread_join(pthread_self(), NULL);
 }
 
 void print_primes() {
@@ -49,7 +78,10 @@ void print_primes() {
 }
 
 pthread_t *tid;
-int tid_idx = 0;
+long* ls;
+
+int tid_tail = 0;
+int tid_head = 0;
 
 /*
  *
@@ -58,7 +90,7 @@ int main(int argc, char** argv) {
 
     struct timeval start_time, end_time;
     long milli_time, seconds, useconds;
-
+    long j;
 
     if (argc < 2) {
         nprimes = 10000000;
@@ -68,28 +100,34 @@ int main(int argc, char** argv) {
     char buf[256];
     printf("PPRIMES %s\n", getcwd(buf, 255));
     printf("Looking for primes up to %ld\n", nprimes);
-    tid = malloc(nprimes * sizeof (pthread_t));
+    tid = malloc((MAX_TASKS + 1) * sizeof (pthread_t));
+    ls = malloc((MAX_TASKS + 1) * sizeof (long));
+
     noTasks = 0;
     primes = malloc(nprimes * sizeof (char));
     long first = 2;
     gettimeofday(&start_time, NULL);
-    pthread_create(&tid[tid_idx++], NULL, mark_from, (void *) (&first));
-    usleep(30);
+    pthread_create(&tid[tid_tail++], NULL, mark_from, (void *) (&first));
+    usleep(300);
     for (long i = 3; i < (nprimes); i++) {
-        while (noTasks > 2048) {
+        while (noTasks > MAX_TASKS) {
             printf("\r%d tasks active ", noTasks);
-            usleep(30);
+            usleep(300);
             noTasks--;
         }
         if (primes[i] == 0) {
-            long j = i;
-            int fail = pthread_create(&tid[tid_idx++], NULL, mark_from, (void *) (&j));
+            ls[tid_tail] = i;
+            int fail = pthread_create(&tid[tid_tail], NULL, mark_from, (void *) (&ls[tid_tail]));
             if (fail) {
-                perror("Thread creation failed!");
+                perror("Thread creation failure, aborting");
+                exit(-1);
             }
+            tid_tail++;
+            usleep(100);
         }
-
     }
+
+
     /*
     gettimeofday(&end_time, NULL);
     seconds = end_time.tv_sec - start_time.tv_sec; //seconds
@@ -97,9 +135,9 @@ int main(int argc, char** argv) {
     milli_time = ((seconds) * 1000 + useconds / 1000.0);
     printf("%ld milliseconds elapsed. Press ENTER to see primes:", milli_time);
      */
-    //getchar();
-    print_primes();
-    free(primes);
+    getchar();
+    // print_primes();
+    //free(primes);
     return (EXIT_SUCCESS);
 
 }
